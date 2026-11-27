@@ -71,11 +71,16 @@ jobs:
       - name: Compilar APK
         run: |
           cd android
+          set -o pipefail
           ./gradlew assembleRelease --no-daemon \
             -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/theo.jks \
             -Pandroid.injected.signing.store.password=$KS_PASS \
             -Pandroid.injected.signing.key.alias=theo \
-            -Pandroid.injected.signing.key.password=$KS_PASS
+            -Pandroid.injected.signing.key.password=$KS_PASS 2>&1 | tee build.log || {
+              # Mostra o erro como anotação (visível sem login na página do Actions/API).
+              grep -iE "error|what went wrong|failed|exception" build.log | head -25 | while IFS= read -r l; do echo "::error::$l"; done
+              exit 1
+            }
           cp app/build/outputs/apk/release/app-release.apk $GITHUB_WORKSPACE/mundo-do-theo.apk
 
       - name: Publicar para download
