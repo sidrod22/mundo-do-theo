@@ -14,14 +14,20 @@ function save(k, v) { try { localStorage.setItem('theo_' + k, JSON.stringify(v))
 const state = { stars: load('stars', 0), voice: load('voice', true), sound: load('sound', true), limite: load('limite', 0) };
 
 /* ---------- voz ---------- */
+// No app Android (APK) a fala usa o TTS nativo do tablet; no navegador, a Web Speech API.
+const CAP = window.Capacitor;
+const NATIVO = !!(CAP && CAP.isNativePlatform && CAP.isNativePlatform());
+const TTS = NATIVO ? ((CAP.Plugins && CAP.Plugins.TextToSpeech) || (CAP.registerPlugin && CAP.registerPlugin('TextToSpeech'))) : null;
 let vozPt = null;
 function escolherVoz() {
   const vs = speechSynthesis.getVoices();
   vozPt = vs.find(v => /pt[-_]BR/i.test(v.lang)) || vs.find(v => /^pt/i.test(v.lang)) || null;
 }
-if ('speechSynthesis' in window) { escolherVoz(); speechSynthesis.onvoiceschanged = escolherVoz; }
+if (!TTS && 'speechSynthesis' in window) { escolherVoz(); speechSynthesis.onvoiceschanged = escolherVoz; }
 function falar(txt) {
-  if (!state.voice || !('speechSynthesis' in window)) return;
+  if (!state.voice) return;
+  if (TTS) { TTS.stop().catch(() => {}).then(() => TTS.speak({ text: txt, lang: 'pt-BR', rate: 0.9, pitch: 1.15 })).catch(() => {}); return; }
+  if (!('speechSynthesis' in window)) return;
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(txt);
   u.lang = 'pt-BR'; if (vozPt) u.voice = vozPt;
@@ -96,7 +102,7 @@ function aoSair(fn) { limpezas.push(fn); }
 function depois(fn, ms) { const t = setTimeout(fn, ms); aoSair(() => clearTimeout(t)); }
 function tela(html, cls = '') {
   limpezas.forEach(f => f()); limpezas = [];
-  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  if (TTS) TTS.stop().catch(() => {}); else if ('speechSynthesis' in window) speechSynthesis.cancel();
   $$('.confete').forEach(c => c.remove());
   app.innerHTML = `<div class="tela ${cls}">${html}</div>`;
   return app.firstElementChild;
@@ -384,7 +390,7 @@ setInterval(() => {
 /* ---------- tela cheia, botão voltar, offline ---------- */
 function telaCheia() {
   const standalone = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches;
-  if (!standalone && !document.fullscreenElement && document.documentElement.requestFullscreen) {
+  if (!NATIVO && !standalone && !document.fullscreenElement && document.documentElement.requestFullscreen) {
     document.documentElement.requestFullscreen().catch(() => {});
   }
 }
@@ -393,7 +399,7 @@ history.pushState(null, '', location.href);
 addEventListener('popstate', () => { history.pushState(null, '', location.href); if (!emDescanso && !$('.splash')) home(); });
 addEventListener('contextmenu', e => e.preventDefault());
 
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+if (!NATIVO && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 

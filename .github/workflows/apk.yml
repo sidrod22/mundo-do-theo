@@ -1,0 +1,84 @@
+# Gera o APK do Mundo do Theo a cada envio para o main.
+# Download fixo: https://github.com/sidrod22/mundo-do-theo/releases/latest/download/mundo-do-theo.apk
+name: Gerar APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+    env:
+      KS_PASS: mundotheo2026
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # A chave de assinatura precisa ser sempre a mesma para o tablet aceitar atualizações.
+      # Na primeira execução ela é criada e guardada no repositório.
+      - name: Chave de assinatura
+        run: |
+          if [ ! -f theo.jks ]; then
+            keytool -genkeypair -keystore theo.jks -alias theo -storepass "$KS_PASS" -keypass "$KS_PASS" \
+              -dname "CN=Mundo do Theo" -keyalg RSA -keysize 2048 -validity 20000
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git add theo.jks
+            git commit -m "Chave de assinatura do APK [skip ci]"
+            git push
+          fi
+
+      - name: Instalar Capacitor
+        run: npm install
+
+      - name: Montar pasta web
+        run: |
+          mkdir -p www
+          cp -r index.html style.css app.js manifest.json icons www/
+          cp node_modules/@capacitor/core/dist/capacitor.js www/
+          sed -i 's#<script src="app.js"></script>#<script src="capacitor.js"></script><script src="app.js"></script>#' www/index.html
+
+      - name: Projeto Android
+        run: |
+          npx cap add android
+          RES=android/app/src/main/res
+          rm -rf $RES/mipmap-anydpi-v26
+          for d in $RES/mipmap-*; do
+            cp icons/icon-192.png $d/ic_launcher.png
+            cp icons/icon-192.png $d/ic_launcher_round.png
+            rm -f $d/ic_launcher_foreground.png
+          done
+          sed -i "s/versionCode 1$/versionCode ${{ github.run_number }}/; s/versionName \"1.0\"/versionName \"1.${{ github.run_number }}\"/" android/app/build.gradle
+          npx cap sync android
+
+      - name: Compilar APK
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/theo.jks \
+            -Pandroid.injected.signing.store.password=$KS_PASS \
+            -Pandroid.injected.signing.key.alias=theo \
+            -Pandroid.injected.signing.key.password=$KS_PASS
+          cp app/build/outputs/apk/release/app-release.apk $GITHUB_WORKSPACE/mundo-do-theo.apk
+
+      - name: Publicar para download
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.${{ github.run_number }}
+          name: Mundo do Theo 1.${{ github.run_number }}
+          files: mundo-do-theo.apk
+          make_latest: true

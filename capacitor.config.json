@@ -1,0 +1,8 @@
+{
+  "appId": "br.sidrod.mundodotheo",
+  "appName": "Mundo do Theo",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#fff7e6"
+  }
+}
