@@ -1,5 +1,5 @@
 // Funciona offline: tenta a rede primeiro (pega atualizações) e cai no cache sem internet.
-const CACHE = 'mundo-theo-v1';
+const CACHE = 'mundo-theo-v2';
 const ARQUIVOS = ['./', 'index.html', 'style.css', 'app.js', 'manifest.json', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
